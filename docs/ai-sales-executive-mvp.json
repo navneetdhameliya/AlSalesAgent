@@ -1,0 +1,1490 @@
+{
+  "meta": {
+    "name": "AI Sales Executive MVP",
+    "version": "1.1",
+    "date": "2026-11-21",
+    "owner": "Navneet Dhameliya",
+    "source_documents": [
+      "PRD: AI Sales Executive MVP: Product Requirements (PRD), Google Doc",
+      "56-question requirements Q&A, answered 21 Nov 2026"
+    ],
+    "reference_product": "SaleAssist.ai (AIVA): first-line AI sales agent with Hot/Warm/Cold grading and human handoff",
+    "goal": "Reply to new leads within 5 minutes on WhatsApp, web chat and email, qualify and grade them, follow up silent leads on day 1, 3 and 7, and hand Hot leads to a human with a summary.",
+    "build_window": "2 to 3 days",
+    "how_to_use": [
+      "Give this file to Claude Code at the start of every session.",
+      "Build one day at a time using build_plan. Do not start the next day until the owner approves.",
+      "Where this file and a later chat decision disagree, the later decision wins and this file is updated.",
+      "Never hardcode secrets. All secrets come from environment variables."
+    ]
+  },
+  "decisions": {
+    "use_case": "Own company's sales, generic industry, buyers and clients only",
+    "launch_volume": "Under 100 leads per month, tested by the owner only",
+    "customers": "Global, English only, deals of any size, sales cycle 1 to 7 days",
+    "ai_name": "AI Sales Executive",
+    "persona": "Human-style first name and professional formal tone. Must state it is an AI if asked directly.",
+    "tone": "Professional and formal",
+    "reply_length": "3 to 4 lines",
+    "first_reply_sla_minutes": 5,
+    "approval_policy": "Fully automatic except quotations, which a human must approve before sending",
+    "after_human_takeover": "AI drafts replies, human approves each one",
+    "model": "Claude, called from the backend only",
+    "no_custom_llm": true,
+    "primary_metric": "time to first reply"
+  },
+  "scope": {
+    "in_mvp": [
+      "Channels: WhatsApp (test mode on owner's own number), website chat widget, email",
+      "Lead intake: website form webhook, CSV upload, manual entry, WhatsApp first message creates a lead",
+      "Knowledge base from pasted text and uploaded PDF or Word files",
+      "Price answers calculated from rules, with a fixed price list as the fallback",
+      "Qualifying questions and Hot/Warm/Cold grading",
+      "Follow-ups on day 1, day 3 and day 7",
+      "STOP and unsubscribe handling",
+      "Human handoff with summary, assignment by manager, draft-and-approve after takeover",
+      "Quotation approval queue",
+      "Dashboard: leads list, chat view, knowledge base manager, simple analytics",
+      "Hot lead alerts to the dashboard and to the salesperson on WhatsApp",
+      "Daily email report: new and Hot leads, leads stuck with no reply",
+      "Webhook export of leads",
+      "Motion and animation: P1 items in motion_design (AI presence orb, streaming replies, grade and Hot alert transitions, handoff transition)"
+    ],
+    "phase_2": [
+      "AI voice calls",
+      "SMS",
+      "Push notifications",
+      "Website crawl and Google Sheet import for the knowledge base",
+      "Manager chat (ask the AI about the pipeline)",
+      "Weekly pipeline report",
+      "Outside CRM connectors (Zoho, HubSpot)",
+      "Video agent",
+      "Multi-company SaaS (multi-tenancy)",
+      "Motion P2 and P3 items: pipeline flow ribbon, 3D lead constellation, scroll-driven marketing site"
+    ],
+    "cut_order_if_late": [
+      "0. Motion polish (ship with plain CSS transitions)",
+      "1. Simple analytics screen",
+      "2. Price rules engine, fall back to fixed price list",
+      "3. CSV upload",
+      "4. Document upload, keep pasted text only"
+    ]
+  },
+  "stack": {
+    "model": {
+      "provider": "Anthropic Claude",
+      "default_model_env": "CLAUDE_MODEL",
+      "suggested_default": "claude-sonnet-5-5",
+      "note": "Model id is an env variable so it can be changed without code changes."
+    },
+    "dashboard": "Next.js (App Router) + TypeScript + Tailwind, hosted on Vercel",
+    "backend": "FastAPI (Python 3.12) with Pydantic v2, hosted on Render",
+    "database": "Supabase PostgreSQL, Singapore region, with pgvector for knowledge base search",
+    "auth": "Supabase Auth, email and password, role stored in profiles table",
+    "files": "Supabase Storage, private bucket, short-lived signed URLs only",
+    "workers": "Render background worker or cron calling FastAPI jobs (APScheduler in the first version)",
+    "whatsapp": "Meta WhatsApp Cloud API with the free test number for the demo. Official Business API through a partner when real customers are added.",
+    "email": "Transactional email provider (Resend suggested, to be confirmed by owner)",
+    "web_chat": "Embeddable JavaScript widget served by the dashboard app, talks to the backend over HTTPS and Server-Sent Events",
+    "build_tool": "Claude Code",
+    "repo": "Single monorepo: backend/, dashboard/, widget/, shared/, docs/"
+  },
+  "repo_layout": {
+    "backend/": "FastAPI app: app/api, app/agent, app/channels, app/jobs, app/services, app/models, tests",
+    "dashboard/": "Next.js app for owner, manager and sales team",
+    "widget/": "Small script that renders the chat bubble on any website",
+    "shared/": "openapi.json generated from the backend, shared types, prompt files",
+    "docs/": "This JSON, PRD link, runbook"
+  },
+  "roles": {
+    "owner": [
+      "all screens",
+      "manage knowledge base",
+      "approve quotations",
+      "manage users",
+      "settings"
+    ],
+    "manager": [
+      "leads",
+      "assign leads",
+      "approve quotations",
+      "reports",
+      "view knowledge base"
+    ],
+    "sales": [
+      "own assigned leads",
+      "approve AI drafts after takeover",
+      "add notes"
+    ],
+    "admin": [
+      "settings",
+      "knowledge base",
+      "integrations",
+      "users"
+    ]
+  },
+  "database": {
+    "conventions": [
+      "UUID primary keys, created_at and updated_at on every table",
+      "All times stored in UTC",
+      "Phone numbers stored in E.164",
+      "Soft delete with deleted_at for leads and knowledge items",
+      "Row level security on every table, based on the role in profiles"
+    ],
+    "tables": {
+      "profiles": {
+        "columns": [
+          "id (= auth user id)",
+          "full_name",
+          "email",
+          "phone_e164",
+          "role (owner|manager|sales|admin)",
+          "whatsapp_alerts_enabled",
+          "active"
+        ]
+      },
+      "leads": {
+        "columns": [
+          "id",
+          "name",
+          "phone_e164",
+          "email",
+          "company",
+          "city",
+          "country",
+          "source (website_form|whatsapp|web_chat|email|phone_call|ads|marketplace|csv|manual)",
+          "source_detail",
+          "requirement",
+          "budget_text",
+          "budget_amount",
+          "budget_currency",
+          "timeline_text",
+          "location_text",
+          "deal_size_estimate",
+          "lead_type (client)",
+          "stage (new|qualifying|qualified|quote_sent|booked|won|lost|stopped)",
+          "grade (hot|warm|cold|ungraded)",
+          "grade_reason",
+          "score_signals (jsonb)",
+          "assigned_to (profiles.id)",
+          "human_takeover (bool)",
+          "ai_paused (bool)",
+          "opted_out_at",
+          "opt_out_channel",
+          "first_reply_at",
+          "first_response_seconds",
+          "last_inbound_at",
+          "last_outbound_at",
+          "next_followup_at",
+          "followup_step (0..3)",
+          "tags (text[])",
+          "notes"
+        ],
+        "indexes": [
+          "phone_e164",
+          "email",
+          "stage",
+          "grade",
+          "assigned_to",
+          "next_followup_at"
+        ]
+      },
+      "conversations": {
+        "columns": [
+          "id",
+          "lead_id",
+          "channel (whatsapp|web_chat|email)",
+          "channel_thread_id",
+          "status (open|closed)",
+          "last_message_at"
+        ]
+      },
+      "messages": {
+        "columns": [
+          "id",
+          "conversation_id",
+          "lead_id",
+          "direction (inbound|outbound)",
+          "sender (lead|ai|human|system)",
+          "channel",
+          "body",
+          "attachments (jsonb)",
+          "status (draft|pending_approval|queued|sent|delivered|read|failed|received)",
+          "provider_message_id",
+          "error",
+          "approved_by",
+          "approved_at",
+          "ai_run_id",
+          "is_quote (bool)"
+        ]
+      },
+      "quotations": {
+        "columns": [
+          "id",
+          "lead_id",
+          "message_id",
+          "line_items (jsonb)",
+          "subtotal",
+          "tax",
+          "total",
+          "currency",
+          "price_rule_ids (uuid[])",
+          "status (pending|approved|rejected|sent)",
+          "created_by_ai (bool)",
+          "reviewed_by",
+          "reviewed_at",
+          "reviewer_note"
+        ]
+      },
+      "ai_runs": {
+        "columns": [
+          "id",
+          "lead_id",
+          "conversation_id",
+          "trigger (inbound_message|followup|manual)",
+          "model",
+          "prompt_version",
+          "input_tokens",
+          "output_tokens",
+          "latency_ms",
+          "tool_calls (jsonb)",
+          "retrieved_chunk_ids (uuid[])",
+          "decision (reply|handoff|quote_draft|stop|no_action)",
+          "guardrail_flags (jsonb)",
+          "error"
+        ]
+      },
+      "knowledge_items": {
+        "columns": [
+          "id",
+          "title",
+          "kind (product|faq|policy|transcript|other)",
+          "source (pasted|upload)",
+          "file_key",
+          "raw_text",
+          "status (active|archived)",
+          "updated_by"
+        ]
+      },
+      "knowledge_chunks": {
+        "columns": [
+          "id",
+          "knowledge_item_id",
+          "chunk_index",
+          "content",
+          "embedding (vector)",
+          "token_count"
+        ]
+      },
+      "products": {
+        "columns": [
+          "id",
+          "sku",
+          "name",
+          "description",
+          "unit",
+          "base_price",
+          "currency",
+          "active"
+        ]
+      },
+      "price_rules": {
+        "columns": [
+          "id",
+          "product_id",
+          "name",
+          "type (fixed|per_unit|tiered|formula)",
+          "params (jsonb)",
+          "min_qty",
+          "max_qty",
+          "currency",
+          "active",
+          "notes"
+        ],
+        "note": "Formulas run in a safe expression evaluator in the backend, never by the model. The model only passes inputs (size, quantity) and receives the computed result."
+      },
+      "followups": {
+        "columns": [
+          "id",
+          "lead_id",
+          "step (1|2|3)",
+          "due_at",
+          "status (scheduled|sent|skipped|cancelled)",
+          "skip_reason",
+          "message_id"
+        ]
+      },
+      "handoffs": {
+        "columns": [
+          "id",
+          "lead_id",
+          "reason",
+          "summary (jsonb)",
+          "grade",
+          "assigned_to",
+          "alerted_via (jsonb)",
+          "acknowledged_at",
+          "created_at"
+        ]
+      },
+      "opt_outs": {
+        "columns": [
+          "id",
+          "phone_e164",
+          "email",
+          "channel",
+          "source (stop_reply|unsubscribe_link|manual)",
+          "created_at"
+        ]
+      },
+      "settings": {
+        "columns": [
+          "key",
+          "value (jsonb)"
+        ],
+        "keys": [
+          "business_profile (name, what we sell, working hours, timezone)",
+          "persona (display name)",
+          "followup_schedule_days = [1,3,7]",
+          "first_reply_delay_seconds_min / max",
+          "quiet_hours (start, end, timezone)",
+          "hot_alert_recipients",
+          "daily_report_recipients and send_time",
+          "stuck_lead_hours = 48",
+          "webhook_export_url",
+          "prompt_version"
+        ]
+      },
+      "audit_logs": {
+        "columns": [
+          "id",
+          "actor_id",
+          "action",
+          "target_type",
+          "target_id",
+          "before (jsonb)",
+          "after (jsonb)",
+          "at"
+        ]
+      },
+      "webhook_events": {
+        "columns": [
+          "id",
+          "provider",
+          "event_id (unique)",
+          "payload (jsonb)",
+          "processed_at",
+          "error"
+        ],
+        "note": "Store every inbound webhook before processing. Unique event_id makes retries safe."
+      }
+    }
+  },
+  "state_machines": {
+    "lead_stage": {
+      "new": [
+        "qualifying",
+        "stopped"
+      ],
+      "qualifying": [
+        "qualified",
+        "lost",
+        "stopped"
+      ],
+      "qualified": [
+        "quote_sent",
+        "booked",
+        "lost",
+        "stopped"
+      ],
+      "quote_sent": [
+        "booked",
+        "won",
+        "lost",
+        "stopped"
+      ],
+      "booked": [
+        "won",
+        "lost"
+      ],
+      "won": [],
+      "lost": [
+        "qualifying"
+      ],
+      "stopped": []
+    },
+    "message_status": {
+      "draft": [
+        "pending_approval",
+        "queued"
+      ],
+      "pending_approval": [
+        "queued",
+        "draft"
+      ],
+      "queued": [
+        "sent",
+        "failed"
+      ],
+      "sent": [
+        "delivered",
+        "failed"
+      ],
+      "delivered": [
+        "read"
+      ],
+      "failed": [
+        "queued"
+      ]
+    },
+    "quotation_status": {
+      "pending": [
+        "approved",
+        "rejected"
+      ],
+      "approved": [
+        "sent"
+      ],
+      "rejected": [],
+      "sent": []
+    }
+  },
+  "agent": {
+    "design": "One agent loop per inbound event: load lead and history, retrieve knowledge, call Claude with tools, run guardrail checks, then send, queue for approval, or hand off.",
+    "prompt_files": {
+      "system": "shared/prompts/system.md",
+      "qualifying": "shared/prompts/qualifying.md",
+      "grading": "shared/prompts/grading.md",
+      "handoff_summary": "shared/prompts/handoff_summary.md",
+      "followup": "shared/prompts/followup.md"
+    },
+    "system_prompt_rules": [
+      "You are {persona_name}, a sales executive for {business_name}. Write in a professional, formal tone, in English.",
+      "Keep replies to 3 or 4 lines. Ask at most one or two questions per message.",
+      "Use only facts from the retrieved knowledge and tool results. If the answer is not there, say you will check and call hand_off_to_human.",
+      "If the customer asks whether they are speaking to a bot or an AI, say clearly that you are an AI assistant for the company, and offer a human.",
+      "Collect, in a natural order: name and phone, requirement or product, budget, timeline and location. Save each answer with update_lead.",
+      "Never invent prices, discounts, stock or specifications. Prices come only from get_price.",
+      "Never promise delivery dates or lead times unless a knowledge item states them as standard. Otherwise say a team member will confirm.",
+      "Never offer or agree to a discount. Pass discount requests to a human.",
+      "Stay on topic about the business. Politely decline unrelated requests.",
+      "If the customer writes STOP, UNSUBSCRIBE or similar, call stop_contact and send one short confirmation.",
+      "If the customer asks for a person, is angry, or raises a complaint, call hand_off_to_human."
+    ],
+    "tools": [
+      {
+        "name": "search_knowledge",
+        "purpose": "Vector search over knowledge_chunks",
+        "input": {
+          "query": "string",
+          "top_k": "integer, default 5"
+        },
+        "output": "list of {chunk_id, title, content}"
+      },
+      {
+        "name": "get_price",
+        "purpose": "Compute a price from price_rules. Runs deterministic code, never the model.",
+        "input": {
+          "product_id_or_name": "string",
+          "quantity": "number",
+          "attributes": "object, e.g. size, material"
+        },
+        "output": "{unit_price, total, currency, rule_ids, breakdown} or {error: no_rule_matches}"
+      },
+      {
+        "name": "update_lead",
+        "purpose": "Save qualifying answers",
+        "input": {
+          "name": "string?",
+          "phone": "string?",
+          "email": "string?",
+          "company": "string?",
+          "city": "string?",
+          "requirement": "string?",
+          "budget_text": "string?",
+          "timeline_text": "string?",
+          "location_text": "string?",
+          "deal_size_estimate": "number?"
+        },
+        "output": "updated lead"
+      },
+      {
+        "name": "set_grade",
+        "purpose": "Set Hot, Warm or Cold with a reason and signals",
+        "input": {
+          "grade": "hot|warm|cold",
+          "reason": "string",
+          "signals": "string[]"
+        },
+        "output": "ok"
+      },
+      {
+        "name": "draft_quotation",
+        "purpose": "Create a quotation from price results. Never sent without human approval.",
+        "input": {
+          "line_items": "array of {product, quantity, unit_price, total}",
+          "currency": "string",
+          "note": "string?"
+        },
+        "output": "quotation id with status pending"
+      },
+      {
+        "name": "book_meeting",
+        "purpose": "Record a meeting or call request and notify the assigned person. Calendar integration is phase 2.",
+        "input": {
+          "preferred_time_text": "string",
+          "channel": "call|video|visit",
+          "note": "string?"
+        },
+        "output": "ok"
+      },
+      {
+        "name": "hand_off_to_human",
+        "purpose": "Create a handoff with summary and alert the salesperson",
+        "input": {
+          "reason": "string"
+        },
+        "output": "handoff id"
+      },
+      {
+        "name": "stop_contact",
+        "purpose": "Mark the lead opted out and cancel follow-ups",
+        "input": {
+          "source": "stop_reply|unsubscribe_link|manual"
+        },
+        "output": "ok"
+      }
+    ],
+    "qualifying_fields": [
+      "name",
+      "phone",
+      "requirement",
+      "budget",
+      "timeline",
+      "location"
+    ],
+    "grading": {
+      "scale": [
+        "hot",
+        "warm",
+        "cold"
+      ],
+      "hot_signals": [
+        "Gave a budget and a timeline",
+        "Asked for a quote or price",
+        "Asked to talk to a person",
+        "Replies quickly and often"
+      ],
+      "rules": [
+        "Hot: at least two hot signals, or an explicit request for a quote or a person.",
+        "Warm: has a clear requirement but is missing budget or timeline, or replies slowly.",
+        "Cold: no clear requirement, or no reply after the last follow-up."
+      ],
+      "regrade": "After every inbound message the agent may call set_grade. The reason is stored and shown in the dashboard."
+    },
+    "followups": {
+      "schedule_days": [
+        1,
+        3,
+        7
+      ],
+      "send_window": "Business hours of the lead's timezone when known, otherwise the business timezone",
+      "skip_when": [
+        "lead replied since last outbound",
+        "stage in won/lost/stopped/booked",
+        "opted_out",
+        "human_takeover",
+        "ai_paused"
+      ],
+      "after_last_followup_without_reply": "Set grade to cold and keep stage unchanged",
+      "content": "Short, formal, references the earlier conversation, one clear question. Generated by the agent using prompts/followup.md."
+    },
+    "handoff": {
+      "triggers": [
+        "Lead graded hot",
+        "Lead asks for a person",
+        "Agent does not know the answer",
+        "Complaint or strong negative sentiment",
+        "Quotation drafted (goes to approval queue, owner or manager notified)"
+      ],
+      "summary_schema": {
+        "need": "string",
+        "budget": "string",
+        "timeline": "string",
+        "grade": "hot|warm|cold",
+        "grade_reason": "string",
+        "suggested_next_step": "string",
+        "chat_link": "URL to the lead chat view in the dashboard"
+      },
+      "alerts": [
+        "dashboard notification",
+        "WhatsApp message to the assigned salesperson, or to the manager if unassigned"
+      ],
+      "after_takeover": "human_takeover = true. Agent switches to draft mode: it writes a draft reply, status pending_approval, and the human approves, edits or discards it."
+    },
+    "guardrails": {
+      "pre_send_checks": [
+        "No price or number in the reply that is not present in a get_price result or a retrieved knowledge chunk",
+        "No discount language: discount, offer, reduced, special price, unless quoting a stored rule",
+        "No delivery date promises: regex for dates and phrases such as 'will be delivered by'",
+        "Message length within 3 to 4 lines for WhatsApp and chat",
+        "No message if opted_out, quiet hours do not apply to direct replies but apply to follow-ups"
+      ],
+      "on_failure": "Regenerate once with the failure reason. If it fails again, do not send: create a handoff with reason 'guardrail failure'.",
+      "quote_rule": "Any message with is_quote = true is created with status pending_approval and only sent after a manager or owner approves."
+    },
+    "first_reply_delay": "Send within 5 minutes. Add a short random delay (for example 20 to 90 seconds) so replies feel natural, configurable in settings.",
+    "context_window": "Send the last 20 messages plus the lead record and top 5 knowledge chunks. Summarize older messages into a running summary stored on the conversation."
+  },
+  "api": {
+    "base_path": "/api/v1",
+    "conventions": [
+      "Success: {data, meta}. Error: {error: {code, message, fields, details}}",
+      "Auth: Supabase JWT in Authorization: Bearer for dashboard calls",
+      "Webhooks: verify provider signature, store event first, process idempotently",
+      "OpenAPI is generated by FastAPI and checked into shared/openapi.json"
+    ],
+    "endpoints": [
+      {
+        "method": "POST",
+        "path": "/public/leads",
+        "auth": "API key",
+        "purpose": "Website form webhook creates a lead and starts the first reply"
+      },
+      {
+        "method": "POST",
+        "path": "/public/chat/sessions",
+        "auth": "widget key",
+        "purpose": "Start a web chat session, creates a lead"
+      },
+      {
+        "method": "POST",
+        "path": "/public/chat/sessions/{id}/messages",
+        "auth": "widget session token",
+        "purpose": "Customer sends a chat message"
+      },
+      {
+        "method": "GET",
+        "path": "/public/chat/sessions/{id}/stream",
+        "auth": "widget session token",
+        "purpose": "Server-Sent Events for AI replies"
+      },
+      {
+        "method": "GET",
+        "path": "/webhooks/whatsapp",
+        "auth": "verify token",
+        "purpose": "Meta webhook verification"
+      },
+      {
+        "method": "POST",
+        "path": "/webhooks/whatsapp",
+        "auth": "signature",
+        "purpose": "Inbound messages and delivery status"
+      },
+      {
+        "method": "POST",
+        "path": "/webhooks/email/inbound",
+        "auth": "signature",
+        "purpose": "Inbound email replies"
+      },
+      {
+        "method": "POST",
+        "path": "/webhooks/email/events",
+        "auth": "signature",
+        "purpose": "Delivered, bounced, complaint"
+      },
+      {
+        "method": "GET",
+        "path": "/public/unsubscribe",
+        "auth": "signed token",
+        "purpose": "Email unsubscribe link"
+      },
+      {
+        "method": "GET",
+        "path": "/me",
+        "role": "any",
+        "purpose": "Profile and role"
+      },
+      {
+        "method": "GET",
+        "path": "/leads",
+        "role": "owner|manager|sales",
+        "purpose": "List with filters: stage, grade, assignee, source, q, date. Counts in meta."
+      },
+      {
+        "method": "POST",
+        "path": "/leads",
+        "role": "owner|manager|sales",
+        "purpose": "Manual entry"
+      },
+      {
+        "method": "POST",
+        "path": "/leads/import",
+        "role": "owner|manager",
+        "purpose": "CSV upload with column mapping and duplicate check by phone or email"
+      },
+      {
+        "method": "GET",
+        "path": "/leads/{id}",
+        "role": "by assignment",
+        "purpose": "Lead detail with handoff summary"
+      },
+      {
+        "method": "PATCH",
+        "path": "/leads/{id}",
+        "role": "owner|manager|sales",
+        "purpose": "Edit fields, stage, grade, tags, notes"
+      },
+      {
+        "method": "POST",
+        "path": "/leads/{id}/assign",
+        "role": "owner|manager",
+        "purpose": "Assign a salesperson"
+      },
+      {
+        "method": "POST",
+        "path": "/leads/{id}/takeover",
+        "role": "assigned|manager|owner",
+        "purpose": "Set human_takeover true, AI switches to draft mode"
+      },
+      {
+        "method": "POST",
+        "path": "/leads/{id}/ai-pause",
+        "role": "assigned|manager|owner",
+        "purpose": "Pause or resume the AI on a lead"
+      },
+      {
+        "method": "GET",
+        "path": "/leads/{id}/messages",
+        "role": "by assignment",
+        "purpose": "Chat history"
+      },
+      {
+        "method": "POST",
+        "path": "/leads/{id}/messages",
+        "role": "by assignment",
+        "purpose": "Human sends a message"
+      },
+      {
+        "method": "GET",
+        "path": "/approvals",
+        "role": "owner|manager|sales",
+        "purpose": "Pending quotations and takeover drafts"
+      },
+      {
+        "method": "POST",
+        "path": "/approvals/{message_id}/approve",
+        "role": "owner|manager|sales",
+        "purpose": "Approve and send. Quotations need owner or manager."
+      },
+      {
+        "method": "POST",
+        "path": "/approvals/{message_id}/edit",
+        "role": "owner|manager|sales",
+        "purpose": "Edit the draft then send"
+      },
+      {
+        "method": "POST",
+        "path": "/approvals/{message_id}/reject",
+        "role": "owner|manager|sales",
+        "purpose": "Discard the draft"
+      },
+      {
+        "method": "GET",
+        "path": "/quotations/{id}",
+        "role": "owner|manager|sales",
+        "purpose": "Quotation with price breakdown"
+      },
+      {
+        "method": "GET",
+        "path": "/knowledge",
+        "role": "owner|admin|manager",
+        "purpose": "List items"
+      },
+      {
+        "method": "POST",
+        "path": "/knowledge",
+        "role": "owner|admin",
+        "purpose": "Paste text or upload a file, then chunk and embed in a background job"
+      },
+      {
+        "method": "PATCH",
+        "path": "/knowledge/{id}",
+        "role": "owner|admin",
+        "purpose": "Edit and re-embed"
+      },
+      {
+        "method": "DELETE",
+        "path": "/knowledge/{id}",
+        "role": "owner|admin",
+        "purpose": "Archive"
+      },
+      {
+        "method": "POST",
+        "path": "/knowledge/test-search",
+        "role": "owner|admin",
+        "purpose": "Try a query and see retrieved chunks"
+      },
+      {
+        "method": "GET",
+        "path": "/products",
+        "role": "owner|admin|manager",
+        "purpose": "Product list"
+      },
+      {
+        "method": "POST",
+        "path": "/products",
+        "role": "owner|admin",
+        "purpose": "Create product"
+      },
+      {
+        "method": "GET",
+        "path": "/price-rules",
+        "role": "owner|admin|manager",
+        "purpose": "List rules"
+      },
+      {
+        "method": "POST",
+        "path": "/price-rules",
+        "role": "owner|admin",
+        "purpose": "Create rule, validated by the formula checker"
+      },
+      {
+        "method": "POST",
+        "path": "/price-rules/test",
+        "role": "owner|admin",
+        "purpose": "Run a rule with sample inputs"
+      },
+      {
+        "method": "GET",
+        "path": "/analytics/summary",
+        "role": "owner|manager",
+        "purpose": "Leads, replies, hot leads, average first-reply time, by period"
+      },
+      {
+        "method": "GET",
+        "path": "/analytics/stuck-leads",
+        "role": "owner|manager",
+        "purpose": "Leads with no reply for stuck_lead_hours"
+      },
+      {
+        "method": "GET",
+        "path": "/notifications",
+        "role": "any",
+        "purpose": "Dashboard alerts"
+      },
+      {
+        "method": "POST",
+        "path": "/notifications/read",
+        "role": "any",
+        "purpose": "Mark read"
+      },
+      {
+        "method": "GET",
+        "path": "/settings",
+        "role": "owner|admin",
+        "purpose": "Read settings"
+      },
+      {
+        "method": "PATCH",
+        "path": "/settings",
+        "role": "owner|admin",
+        "purpose": "Update settings, writes an audit row"
+      },
+      {
+        "method": "GET",
+        "path": "/users",
+        "role": "owner|admin",
+        "purpose": "List users"
+      },
+      {
+        "method": "POST",
+        "path": "/users/invite",
+        "role": "owner|admin",
+        "purpose": "Invite a user by email with a role"
+      },
+      {
+        "method": "GET",
+        "path": "/export/leads",
+        "role": "owner|manager",
+        "purpose": "CSV download"
+      },
+      {
+        "method": "POST",
+        "path": "/export/webhook-test",
+        "role": "owner|admin",
+        "purpose": "Send a test payload to webhook_export_url"
+      }
+    ]
+  },
+  "background_jobs": [
+    {
+      "name": "process_inbound_message",
+      "trigger": "Webhook stored",
+      "action": "Run the agent for the lead, send or queue the reply, update grade and stage"
+    },
+    {
+      "name": "send_message",
+      "trigger": "Message status queued",
+      "action": "Check opt-out, send via channel, record provider id, retry with back-off"
+    },
+    {
+      "name": "schedule_followups",
+      "trigger": "Lead enters qualifying",
+      "action": "Create followups for day 1, 3, 7 from last_outbound_at"
+    },
+    {
+      "name": "run_followups",
+      "trigger": "Every 5 minutes",
+      "action": "Find due followups, apply skip rules, run the agent in followup mode, send"
+    },
+    {
+      "name": "embed_knowledge",
+      "trigger": "Knowledge saved",
+      "action": "Extract text, chunk (about 500 tokens, 50 overlap), embed, store"
+    },
+    {
+      "name": "hot_lead_alert",
+      "trigger": "Grade becomes hot or handoff created",
+      "action": "Dashboard notification and WhatsApp to the salesperson"
+    },
+    {
+      "name": "stuck_lead_check",
+      "trigger": "Hourly",
+      "action": "Flag leads with no reply for stuck_lead_hours"
+    },
+    {
+      "name": "daily_report",
+      "trigger": "Daily at settings.daily_report_send_time",
+      "action": "Email owner and manager: new leads, Hot leads, stuck leads, average first-reply time"
+    },
+    {
+      "name": "webhook_export",
+      "trigger": "Lead created or stage changed",
+      "action": "POST lead JSON to webhook_export_url with a signature header, retry on failure"
+    }
+  ],
+  "channels": {
+    "whatsapp": {
+      "mode_now": "Meta Cloud API test number, owner's own number added as a test recipient",
+      "mode_later": "Official Business API through a partner, with approved message templates",
+      "rules": [
+        "Inside the 24-hour window, send free-form replies",
+        "Outside the window, only approved template messages are allowed. In test mode, log a warning.",
+        "STOP, UNSUBSCRIBE and similar words create an opt-out",
+        "Every outbound sales message in production must include an opt-out line, per template"
+      ]
+    },
+    "web_chat": {
+      "rules": [
+        "Widget loads with a site key and allowed origins check",
+        "First message asks for name, then continues the qualifying flow",
+        "Show a clear 'AI assistant' label in the widget header",
+        "Session token in sessionStorage, history restored on reload"
+      ]
+    },
+    "email": {
+      "rules": [
+        "Reply from a fixed sender name and address set in settings",
+        "Thread replies by Message-ID and In-Reply-To",
+        "Every email includes an unsubscribe link, which sets an opt-out",
+        "Bounce or complaint marks the email address as do-not-send"
+      ]
+    }
+  },
+  "dashboard": {
+    "screens": [
+      {
+        "id": "D01",
+        "name": "Login",
+        "roles": [
+          "all"
+        ]
+      },
+      {
+        "id": "D02",
+        "name": "Leads list",
+        "roles": [
+          "owner",
+          "manager",
+          "sales"
+        ],
+        "content": "Filter chips for stage and grade, search, source, assignee, grade badge, last message time, first-reply time, import CSV button, new lead button"
+      },
+      {
+        "id": "D03",
+        "name": "Lead detail and chat",
+        "roles": [
+          "owner",
+          "manager",
+          "sales"
+        ],
+        "content": "Chat thread, lead fields, grade and reason, handoff summary, assign, take over, pause AI, notes, approve drafts inline"
+      },
+      {
+        "id": "D04",
+        "name": "Approvals",
+        "roles": [
+          "owner",
+          "manager",
+          "sales"
+        ],
+        "content": "Pending quotations and takeover drafts with approve, edit, reject"
+      },
+      {
+        "id": "D05",
+        "name": "Knowledge base",
+        "roles": [
+          "owner",
+          "admin",
+          "manager"
+        ],
+        "content": "Items list, paste or upload, products, price rules, test search"
+      },
+      {
+        "id": "D06",
+        "name": "Analytics",
+        "roles": [
+          "owner",
+          "manager"
+        ],
+        "content": "Leads, replies, Hot leads, average first-reply time, stuck leads"
+      },
+      {
+        "id": "D07",
+        "name": "Notifications",
+        "roles": [
+          "all"
+        ]
+      },
+      {
+        "id": "D08",
+        "name": "Settings",
+        "roles": [
+          "owner",
+          "admin"
+        ],
+        "content": "Business profile, persona name, follow-up schedule, quiet hours, alert and report recipients, webhook export, widget embed code, users"
+      }
+    ],
+    "states_required_on_every_screen": [
+      "loading",
+      "empty",
+      "error",
+      "no permission"
+    ]
+  },
+  "security_and_compliance": {
+    "data_region": "Supabase Singapore",
+    "confidential_documents": [
+      "Private storage bucket, no public URLs",
+      "Signed URLs valid for 15 minutes",
+      "Documents are read by the backend only for knowledge extraction",
+      "Do not send document contents to the model unless they are retrieved chunks for the current question"
+    ],
+    "rules": [
+      "Anthropic API key and all provider keys stay on the backend only",
+      "Row level security on all tables, tested",
+      "Rate limit public endpoints per IP and per session",
+      "Verify WhatsApp and email webhook signatures",
+      "Audit log for settings, role, price rule and knowledge changes, and every approval",
+      "Redact phone numbers and emails in application logs",
+      "Never log message bodies at INFO level in production"
+    ],
+    "opt_out": [
+      "STOP reply on WhatsApp creates an opt-out and cancels follow-ups",
+      "Unsubscribe link in every email",
+      "Do-not-disturb check before any future call feature (phase 2)"
+    ],
+    "ai_disclosure": "The AI states it is an AI if asked. The web widget shows an AI label."
+  },
+  "environment_variables": {
+    "core": [
+      "ENVIRONMENT",
+      "API_BASE_URL",
+      "DASHBOARD_URL",
+      "CORS_ORIGINS",
+      "LOG_LEVEL"
+    ],
+    "database": [
+      "DATABASE_URL",
+      "SUPABASE_URL",
+      "SUPABASE_ANON_KEY",
+      "SUPABASE_SERVICE_ROLE_KEY"
+    ],
+    "ai": [
+      "ANTHROPIC_API_KEY",
+      "CLAUDE_MODEL",
+      "EMBEDDING_PROVIDER",
+      "EMBEDDING_API_KEY",
+      "EMBEDDING_MODEL"
+    ],
+    "whatsapp": [
+      "WHATSAPP_PHONE_NUMBER_ID",
+      "WHATSAPP_BUSINESS_ACCOUNT_ID",
+      "WHATSAPP_ACCESS_TOKEN",
+      "WHATSAPP_APP_SECRET",
+      "WHATSAPP_VERIFY_TOKEN"
+    ],
+    "email": [
+      "EMAIL_PROVIDER",
+      "EMAIL_API_KEY",
+      "EMAIL_FROM_NAME",
+      "EMAIL_FROM_ADDRESS",
+      "EMAIL_WEBHOOK_SECRET"
+    ],
+    "public_endpoints": [
+      "LEAD_WEBHOOK_API_KEY",
+      "WIDGET_SITE_KEY",
+      "UNSUBSCRIBE_SIGNING_KEY"
+    ],
+    "export": [
+      "EXPORT_WEBHOOK_SIGNING_SECRET"
+    ],
+    "note": "Embedding provider is open: Claude does not provide an embeddings model, so choose one (for example Voyage AI or OpenAI embeddings) before Day 1 step 4."
+  },
+  "build_plan": {
+    "rules": [
+      "Work one day at a time. After each day, run the acceptance checks, summarize, and wait for owner approval.",
+      "Write tests with the code. Do not move on with failing tests.",
+      "If a task will not fit the day, apply scope.cut_order_if_late and tell the owner."
+    ],
+    "days": [
+      {
+        "day": 1,
+        "title": "Foundation, intake and first reply",
+        "tasks": [
+          "Create monorepo and CI (lint, tests, build)",
+          "Supabase project (Singapore), schema migrations for all tables, RLS policies",
+          "FastAPI skeleton: config, error envelope, auth dependency, audit log helper",
+          "Lead intake: website form webhook, manual create, WhatsApp inbound creates lead",
+          "Knowledge base v1: paste text, chunk, embed, test search",
+          "Agent loop v1: system prompt, search_knowledge, update_lead, reply",
+          "Send path: WhatsApp test number and web chat widget with SSE",
+          "Webhook event store with idempotency"
+        ],
+        "acceptance": [
+          "A message sent from the owner's WhatsApp gets a correct reply from the AI within 5 minutes",
+          "A web chat message gets a streamed reply",
+          "Lead record is created and filled during the conversation",
+          "Replaying the same webhook does not create duplicates"
+        ]
+      },
+      {
+        "day": 2,
+        "title": "Sales logic, safety and handoff",
+        "tasks": [
+          "Qualifying flow and set_grade with stored reasons",
+          "Follow-up scheduler: day 1, 3, 7 with skip rules",
+          "STOP and unsubscribe handling, opt-out checks on every send",
+          "Products and price rules with safe formula evaluator and get_price tool, fixed price fallback",
+          "Quotation draft, approval queue, approve, edit, reject endpoints",
+          "Guardrail pre-send checks and regenerate-once logic",
+          "Handoff: summary, assignment, WhatsApp alert, takeover and draft mode",
+          "Email channel: send, inbound reply threading, unsubscribe link"
+        ],
+        "acceptance": [
+          "A lead giving budget and timeline is graded Hot and the salesperson gets a WhatsApp alert with a summary",
+          "Silent lead receives follow-ups on day 1, 3, 7 and none after a reply or STOP",
+          "A quotation is never sent without approval",
+          "A discount request or a delivery date request never gets an invented answer",
+          "After takeover, AI output appears as a draft and nothing is sent until approved"
+        ]
+      },
+      {
+        "day": 3,
+        "title": "Dashboard, reports and launch",
+        "tasks": [
+          "Next.js dashboard: login, leads list, lead detail and chat, approvals, knowledge base, settings, notifications",
+          "Analytics summary and stuck leads",
+          "Daily email report job",
+          "CSV import and CSV export, webhook export",
+          "Widget embed code in settings",
+          "Deploy: Render (backend, worker), Vercel (dashboard), Supabase production settings",
+          "End-to-end test with 10 scripted scenarios, fix issues",
+          "Motion polish from motion_design (P1 items only, after the acceptance checks pass)"
+        ],
+        "acceptance": [
+          "Owner can run the full flow from lead to Hot handoff using only the dashboard and WhatsApp",
+          "Daily report email arrives with correct counts",
+          "All role permissions behave as defined in roles",
+          "Production URLs work and secrets are set only in the hosting dashboards",
+          "Reduced motion setting disables loops and particles, and animations stay smooth on a throttled CPU"
+        ]
+      }
+    ]
+  },
+  "tests": {
+    "backend": [
+      "RLS: a sales user cannot read leads assigned to others",
+      "Webhook idempotency: same event id processed once",
+      "Opt-out: no outbound message is created for an opted-out lead",
+      "Follow-up skip rules for each skip reason",
+      "Price rules: fixed, per unit, tiered and formula cases, and rejection of unsafe formulas",
+      "Quotation messages never reach status queued without approval",
+      "Guardrails: unsupported price, discount wording, and delivery date wording are blocked",
+      "Grading: scripted conversations produce expected grades"
+    ],
+    "agent_evaluation_set": [
+      "20 sample conversations covering: price question, unknown question, discount request, delivery date request, 'are you a bot', STOP, angry customer, off-topic request, vague requirement, ready-to-buy lead",
+      "Run on every prompt change and store the pass rate in ai_runs"
+    ],
+    "end_to_end": [
+      "New lead from form to first reply",
+      "Silent lead through all three follow-ups",
+      "Hot lead to human takeover to approved draft",
+      "Quotation draft to approval to send"
+    ]
+  },
+  "risks_and_fallbacks": [
+    {
+      "risk": "Price rules engine takes too long",
+      "fallback": "Use a fixed price list in products and answer only from it"
+    },
+    {
+      "risk": "WhatsApp production approval takes days",
+      "fallback": "Demo in test mode and web chat; apply for a partner account in parallel"
+    },
+    {
+      "risk": "Wrong answer sent automatically",
+      "fallback": "Guardrails, quote approval, regenerate-once then handoff, and a global 'approve all messages' setting the owner can switch on"
+    },
+    {
+      "risk": "Embedding provider not chosen",
+      "fallback": "Start with Postgres full-text search, add vectors when the provider is chosen"
+    },
+    {
+      "risk": "Customers get messages in quiet hours",
+      "fallback": "Quiet hours setting applies to follow-ups"
+    }
+  ],
+  "open_items_for_owner": [
+    "Choose the embedding provider (Claude has no embeddings model)",
+    "Choose the email provider (Resend suggested)",
+    "Provide the business profile, product list and price rules for the first knowledge base",
+    "Choose the AI persona's display name",
+    "Confirm daily report time and recipients",
+    "Confirm the salesperson WhatsApp numbers for alerts"
+  ],
+  "motion_design": {
+    "status": "Added 21 Nov 2026. Visual reference: saleassist.ai. The page text does not expose its CSS or motion details, so this spec is original and built from the elements visible on that page: near-black theme (#0B0D10), LIVE badge, 'Speaking' status, 'Connected to a Human' status, live status panels, a carousel with a 1/4 indicator, a comparison of Chat 2% / Voice 3% / Video 27%, and removable filter tags. Nothing here copies their assets or code.",
+    "intent": "The product should feel alive: the AI is visibly listening, thinking, qualifying and handing over, instead of a plain list of chats. Motion explains state, it is never decoration.",
+    "priority_tiers": {
+      "P1_ship_day_3": [
+        "tokens",
+        "AI presence orb",
+        "typing and streaming reply",
+        "grade badge transitions",
+        "Hot lead alert moment",
+        "handoff transition",
+        "list and page transitions",
+        "reduced-motion support"
+      ],
+      "P2_if_time": [
+        "pipeline flow ribbon on analytics",
+        "number count-ups",
+        "widget open sequence polish",
+        "empty state loops"
+      ],
+      "P3_phase_2": [
+        "3D lead constellation",
+        "scroll-driven marketing site",
+        "avatar video agent",
+        "sound design"
+      ]
+    },
+    "libraries": {
+      "dashboard": [
+        "Framer Motion (React) for layout, presence and gestures",
+        "CSS variables and CSS animations for loops",
+        "Lottie (lottie-react) only for 2 or 3 pre-made loops",
+        "Canvas 2D for the orb particles, no heavy WebGL in the MVP"
+      ],
+      "widget": "Vanilla JS with Web Animations API and CSS only, target under 25 KB gzipped, no framework",
+      "avoid": [
+        "GSAP ScrollTrigger in the MVP dashboard (marketing site only, phase 3)",
+        "Three.js in the MVP",
+        "video backgrounds"
+      ]
+    },
+    "visual_language": {
+      "theme": "Dark first. Background #0B0D10, surface #12151A, raised #181C23, hairline borders rgba(255,255,255,0.08)",
+      "grade_colors": {
+        "hot": "#FF5A3C",
+        "warm": "#FFB020",
+        "cold": "#4C8DFF",
+        "ungraded": "#6B7380"
+      },
+      "accent": "A single electric accent #6EE7B7 for 'AI is active', used only for live states",
+      "glow_rule": "Glow is used only on live or Hot elements, so it keeps meaning",
+      "type": "Inter or Geist for UI, tabular numbers for all metrics",
+      "light_theme": "Same tokens inverted, motion identical"
+    },
+    "tokens": {
+      "duration_ms": {
+        "instant": 90,
+        "fast": 160,
+        "base": 240,
+        "slow": 420,
+        "scene": 700
+      },
+      "easing": {
+        "standard": "cubic-bezier(0.2, 0, 0, 1)",
+        "enter": "cubic-bezier(0.05, 0.7, 0.1, 1)",
+        "exit": "cubic-bezier(0.3, 0, 0.8, 0.15)",
+        "spring_soft": {
+          "type": "spring",
+          "stiffness": 220,
+          "damping": 26,
+          "mass": 1
+        },
+        "spring_snappy": {
+          "type": "spring",
+          "stiffness": 420,
+          "damping": 32,
+          "mass": 1
+        }
+      },
+      "stagger_ms": 40,
+      "rules": [
+        "Only animate transform and opacity, plus filter blur on small surfaces",
+        "One primary motion per screen at a time",
+        "Entrances use enter easing, exits are faster than entrances (about 60 percent of the duration)",
+        "Loops pause when the tab is hidden"
+      ]
+    },
+    "signature_moments": [
+      {
+        "id": "M1_ai_presence_orb",
+        "where": "Lead chat header, web widget header, sidebar 'AI status'",
+        "description": "A small soft orb that represents the AI. States: idle (slow breathing scale 1 to 1.04 over 4s with faint accent glow), listening (ring pulses outward each time a customer message arrives), thinking (orb tightens, three orbiting particles rotate at 1.2s per turn), speaking (orb edge ripples in time with streamed tokens), paused (desaturated, no glow), human takeover (orb crossfades into the salesperson's avatar ring over 420ms).",
+        "implementation": "CSS radial gradients and a 120 by 120 canvas for particles. State comes from a single aiState value: idle, listening, thinking, speaking, paused, human.",
+        "label": "Text beside the orb changes with the state: 'Online', 'Reading', 'Thinking', 'Replying', 'Paused', 'Connected to a human'"
+      },
+      {
+        "id": "M2_streaming_reply",
+        "where": "Chat view and widget",
+        "description": "Customer bubble slides up 12px with a soft spring. A typing indicator of three dots morphs from the orb for 400 to 900ms. The AI reply streams word by word with each word fading in from 0 to 1 opacity over 120ms and 2px blur to 0. When the reply finishes, the bubble settles with a 1px overshoot and the delivery tick animates (one tick draws in, then the second).",
+        "implementation": "Server-Sent Events chunks are appended as spans with a CSS animation delay of 0. Respect reduced motion by showing text instantly."
+      },
+      {
+        "id": "M3_lead_grading_reveal",
+        "where": "Lead detail header and leads list rows",
+        "description": "When the AI grades a lead, the grade badge morphs between colors over 420ms. For Cold to Warm, the badge cross-fades and grows 6 percent. For Hot, a ring expands once from the badge and fades (700ms), then a slow 2.4s glow pulse continues until the lead is acknowledged by a human. The reason text appears beneath the badge, typed in line by line with 40ms stagger.",
+        "implementation": "Framer Motion layoutId on the badge so it animates between the list row and the detail header."
+      },
+      {
+        "id": "M4_hot_lead_alert",
+        "where": "Anywhere in the dashboard",
+        "description": "A toast slides in from the top right with a spring. It carries the lead name, grade badge and the one-line need. The toast has a thin progress line around its border that fills over 8 seconds as a countdown to auto-dismiss, but pauses on hover. The bell icon in the top bar rings once (rotate -12, 12, -6, 6, 0 over 600ms) and its counter ticks up with a vertical roll. Clicking the toast flies the lead row to the top of the list and highlights it with a 1.2s accent wash.",
+        "implementation": "Framer Motion AnimatePresence for toasts, layout animation for the list reorder."
+      },
+      {
+        "id": "M5_handoff_transition",
+        "where": "Lead detail when a human takes over",
+        "description": "The handoff summary card unfolds from the grade badge (scale from 0.92, opacity 0 to 1, 420ms). Fields fill in one by one: need, budget, timeline, next step, each with a tiny check that draws itself. The orb crossfades to the salesperson's avatar ring and the chat composer changes from a locked 'AI is replying' bar to an editable composer with a slide-up. A 'Connected to a human' status chip appears with a soft pulse.",
+        "implementation": "Sequence with Framer Motion variants and staggerChildren 80ms."
+      },
+      {
+        "id": "M6_followup_timeline",
+        "where": "Lead detail side panel",
+        "description": "Day 1, Day 3 and Day 7 are dots on a vertical line. The current step's dot pulses. When a follow-up is sent, the dot fills with accent color and a short line draws to the next dot (320ms). If skipped because the lead replied, the dot turns into a check and the remaining dots fade to 40 percent.",
+        "implementation": "SVG path with strokeDashoffset animation."
+      },
+      {
+        "id": "M7_quote_approval",
+        "where": "Approvals screen",
+        "description": "Each pending quotation is a card with a subtle shimmer on its border. Approve slides the card to the right and replaces it with a small 'Sent' stamp that scales from 1.3 to 1 with a haptic-style bounce; reject slides left and fades. Totals count up from 0 over 600ms with tabular numbers. The next card moves up with a layout animation.",
+        "implementation": "Framer Motion drag with threshold, buttons as the accessible path."
+      },
+      {
+        "id": "M8_pipeline_flow",
+        "where": "Analytics screen (P2)",
+        "description": "A horizontal ribbon shows New, Qualifying, Qualified, Quote sent, Booked, Won. Small particles flow along the ribbon, their count proportional to lead volume per stage. Hot leads are brighter particles. Hovering a stage slows the flow and lifts its card. Numbers count up when the screen first enters view.",
+        "implementation": "Canvas 2D, capped at 200 particles, pauses when off screen."
+      },
+      {
+        "id": "M9_channel_comparison_bars",
+        "where": "Analytics screen",
+        "description": "Reply-time and conversion by channel (WhatsApp, web chat, email) as bars that grow from the baseline with 40ms stagger and spring_soft. Hover shows a tooltip that follows the cursor with 80ms lag.",
+        "implementation": "SVG bars, no chart library animation conflicts."
+      },
+      {
+        "id": "M10_widget_open_sequence",
+        "where": "Website chat widget",
+        "description": "The closed bubble has a slow breathing ring (3.2s). On click it expands from the bubble into the chat panel: a circle morph to a rounded rectangle over 420ms with spring_soft, content fades in 120ms later. The header shows the orb and a LIVE badge with a tiny blinking dot. The first AI message arrives after the typing indicator. A 'Connected to a human' state replaces the orb with the person's initials ring.",
+        "implementation": "Web Animations API, transform-origin at the bubble position, honors prefers-reduced-motion."
+      },
+      {
+        "id": "M11_knowledge_ingest",
+        "where": "Knowledge base screen",
+        "description": "After a paste or upload, the text visibly splits into chunk cards that fly into a stack (stagger 30ms) and each gets a small spark when its embedding is saved. A progress ring around the item shows chunks done. Test search shows retrieved chunks lighting up in order of relevance with a score bar that grows.",
+        "implementation": "Framer Motion layout and variants, progress from the embed_knowledge job status."
+      },
+      {
+        "id": "M12_live_status_strip",
+        "where": "Top bar",
+        "description": "A compact strip shows 'AI active', average first-reply time in seconds, and leads waiting. The first-reply number ticks with a vertical roll when it changes. A tiny sparkline of the last 24 hours draws left to right on load. A small 'Live' dot blinks once every 3 seconds.",
+        "implementation": "Supabase realtime subscriptions drive the values."
+      }
+    ],
+    "page_and_list_motion": {
+      "route_transition": "Fade and 8px upward shift, 240ms, outgoing 140ms. Sidebar never animates on route change.",
+      "list_enter": "Rows stagger 40ms, capped at the first 12 rows",
+      "new_lead_row": "Slides in from the top with a 1.2s accent wash that fades out",
+      "filters": "Selected filter chips scale 0.96 to 1 and can be removed with a shrink-fade, like the removable tags on the reference page",
+      "skeletons": "Shimmer gradient 1.4s linear, matches final layout to avoid layout shift",
+      "empty_states": "One slow looping SVG illustration per empty state, 6s loop, paused when off screen"
+    },
+    "micro_interactions": [
+      "Buttons: press scales to 0.97 over 90ms, release springs back",
+      "Cards: hover lifts 2px and brightens the hairline border",
+      "Toggle switches: thumb squash-and-stretch 120ms",
+      "Copy to clipboard: the icon morphs into a check for 1.2s",
+      "Form errors: 4px horizontal shake over 240ms and the field border fades to red",
+      "Success: a check draws itself with strokeDashoffset over 320ms"
+    ],
+    "optional_marketing_page_phase_3": {
+      "note": "Only after the MVP works. Inspired by the reference page's structure: headline, persona cards with 'Speaking' status, a channel comparison and a touchpoints carousel.",
+      "ideas": [
+        "Hero headline with word-by-word reveal and a live demo chat running beside it",
+        "Persona cards that switch between 'Listening' and 'Speaking' on scroll",
+        "Scroll-driven lead journey: a lead dot travels from form to WhatsApp reply to Hot handoff",
+        "Carousel of channels with a 1/4 style indicator and drag inertia"
+      ]
+    },
+    "accessibility_and_performance": {
+      "reduced_motion": "When prefers-reduced-motion is set: no loops, no particles, no parallax, transitions become 120ms opacity fades, streamed text appears instantly. Keep a manual 'Reduce motion' switch in Settings.",
+      "focus": "Motion never moves focus. Toasts are announced with aria-live polite, Hot alerts with aria-live assertive.",
+      "performance_budget": [
+        "60 fps on a mid-range Android phone",
+        "No layout-thrashing animations",
+        "Widget script under 25 KB gzipped",
+        "Canvas animations stop when the tab is hidden or the element is off screen",
+        "Total JS added for motion in the dashboard under 60 KB gzipped"
+      ],
+      "no_flashing": "No element flashes more than 3 times per second"
+    },
+    "build_notes": {
+      "day_3_slot": "Motion is a polish step at the end of Day 3. Build P1 items only if the Day 3 acceptance checks already pass. If not, ship with CSS transitions and add motion after launch.",
+      "component_names": [
+        "AIOrb",
+        "StreamingText",
+        "GradeBadge",
+        "HotToast",
+        "HandoffCard",
+        "FollowupTimeline",
+        "ApprovalCard",
+        "CountUp",
+        "LiveStatusStrip",
+        "WidgetLauncher"
+      ],
+      "single_source_of_truth": "All durations, easings and colors live in dashboard/src/styles/motion.ts and CSS variables. No hardcoded timings in components.",
+      "testing": [
+        "Storybook or a /motion test page showing every component in each state",
+        "Check with reduced motion on",
+        "Check on a throttled CPU (4x slowdown) in browser dev tools"
+      ]
+    }
+  }
+}
