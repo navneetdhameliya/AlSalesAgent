@@ -68,7 +68,7 @@ export default function Home() {
       <footer>
         <div className="wrap" style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <span>© {new Date().getFullYear()} {site.name}</span>
-          <span><a href={`mailto:${site.email}`}>{site.email}</a> · <Link href="/privacy">Privacy</Link></span>
+          <span><a href={`mailto:${site.email}`}>{site.email}</a> · <a href={`https://wa.me/${site.whatsapp}`}>{site.phone}</a> · <Link href="/privacy">Privacy</Link></span>
         </div>
       </footer>
     </>
