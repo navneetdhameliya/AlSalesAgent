@@ -20,7 +20,8 @@ Secrets are typed only into the hosting dashboards (Render, Vercel, Supabase). N
 2. Fill every `sync: false` value (DATABASE_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_JWT_SECRET (optional), ANTHROPIC_API_KEY, WHATSAPP_*, EMAIL_*, API_BASE_URL, DASHBOARD_URL, CORS_ORIGINS).
    DATABASE_URL is the pooled string from step 1.4. The API refuses to start in production with weak or missing secrets and says which ones.
 3. Deploy. Open `https://<service>.onrender.com/health`. It must answer ok.
-4. Keep exactly one instance. The follow-up and report scheduler runs inside the API process, so a second instance would send duplicates.
+4. `render.yaml` starts on the free plan for testing. A free service sleeps when idle, so follow-ups and the daily report pause and the first message after a quiet spell is slow. Before real customers, change the service to the Starter plan in Render (Settings > Instance Type) and set `plan: starter` in `render.yaml`.
+5. Keep exactly one instance. The follow-up and report scheduler runs inside the API process, so a second instance would send duplicates.
 
 ## 3. Vercel (dashboard)
 1. New project, root directory `dashboard`.

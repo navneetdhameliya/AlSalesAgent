@@ -1,11 +1,12 @@
 # Render Blueprint. Secrets are NOT stored here: every `sync: false` value is typed into the Render dashboard.
-# One web service runs the API and the follow-up/report scheduler. Use a paid plan: a free service sleeps and the scheduler stops.
+# One web service runs the API and the follow-up/report scheduler.
+# plan: free is for testing only (it sleeps after ~15 min idle, so follow-ups and reports pause). Switch to `starter` before real customers.
 services:
   - type: web
     name: ai-sales-executive-api
     runtime: python
     region: singapore
-    plan: starter
+    plan: free
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"
