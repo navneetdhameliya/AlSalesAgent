@@ -21,7 +21,10 @@ export default function Login() {
       await refresh();
       router.replace(homeFor(data.role));
     } catch (e) {
-      setError(e instanceof ApiError && e.status === 403 ? "Your account is not set up yet. Ask an owner to invite you." : "Signed in, but the server rejected the session.");
+      if (e instanceof ApiError && e.status === 403) setError("Your account is not set up yet. Ask an owner to invite you.");
+      else if (e instanceof ApiError && e.status === 401) setError("Signed in, but the server did not accept your session token (401). Check the server's SUPABASE_URL.");
+      else if (e instanceof ApiError) setError(`Signed in, but the server answered ${e.status}: ${e.message}`);
+      else setError(`Signed in, but the server could not be reached. Check that the server's CORS_ORIGINS is exactly ${window.location.origin} and that it has finished restarting (a free server can take a minute to wake).`);
     }
   }
 
