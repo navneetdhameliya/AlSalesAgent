@@ -37,7 +37,7 @@ npm run lint && npm test && npm run build
 - Alerts to staff over WhatsApp have the same 24-hour rule; the dashboard notification is always saved.
 - Knowledge search is keyword based; an embeddings provider is still to be chosen.
 - Dashboard updates by polling every few seconds, not by push.
-- Sign-in tokens are verified with the Supabase legacy JWT secret (HS256). Projects that only use asymmetric signing keys need a small change.
+- Sign-in tokens are verified against the Supabase project's public keys (ES256/RS256), or the legacy secret (HS256) if set.
 - Webhook export is lead created and stage changed only.
 
 ## Run locally

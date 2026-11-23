@@ -36,7 +36,7 @@ services:
       # You provide these in the dashboard
       - key: DATABASE_URL            # Supabase connection string (pooler, Singapore)
         sync: false
-      - key: SUPABASE_JWT_SECRET     # Supabase > Project Settings > API > JWT secret
+      - key: SUPABASE_JWT_SECRET     # OPTIONAL: only if the project still signs with the legacy HS256 secret
         sync: false
       - key: SUPABASE_URL
         sync: false

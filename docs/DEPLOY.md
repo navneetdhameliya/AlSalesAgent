@@ -13,11 +13,11 @@ Secrets are typed only into the hosting dashboards (Render, Vercel, Supabase). N
    insert into profiles (id, email, full_name, role, whatsapp_alerts_enabled, active, created_at, updated_at)
    select id, email, 'Your name', 'owner', true, true, now(), now() from auth.users where email = 'you@example.com';
    ```
-6. **Token signing:** the API checks sign-in tokens with the project's JWT secret (HS256). Use the "Legacy JWT secret" from Project Settings > JWT Keys. If your project only offers the newer asymmetric signing keys, tell me before deploying: the API then needs to verify with the project's public keys instead.
+6. **Token signing:** new Supabase projects sign sign-in tokens with an asymmetric key (Project Settings > JWT Keys > "JWT Signing Keys"). The API checks them against the project's public keys, found automatically from `SUPABASE_URL`. You do not need the legacy secret. Set `SUPABASE_JWT_SECRET` only if your project still signs with it.
 
 ## 2. Render (API and scheduler)
 1. New > Blueprint, pick the repo. Render reads `render.yaml`.
-2. Fill every `sync: false` value (DATABASE_URL, SUPABASE_*, ANTHROPIC_API_KEY, WHATSAPP_*, EMAIL_*, API_BASE_URL, DASHBOARD_URL, CORS_ORIGINS).
+2. Fill every `sync: false` value (DATABASE_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_JWT_SECRET (optional), ANTHROPIC_API_KEY, WHATSAPP_*, EMAIL_*, API_BASE_URL, DASHBOARD_URL, CORS_ORIGINS).
    DATABASE_URL is the pooled string from step 1.4. The API refuses to start in production with weak or missing secrets and says which ones.
 3. Deploy. Open `https://<service>.onrender.com/health`. It must answer ok.
 4. Keep exactly one instance. The follow-up and report scheduler runs inside the API process, so a second instance would send duplicates.

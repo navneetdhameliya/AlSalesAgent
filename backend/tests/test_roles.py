@@ -103,3 +103,47 @@ def test_every_dashboard_route_is_in_the_role_table(client):
             if (m, norm) not in covered:
                 missing.append(f"{m} {path}")
     assert not missing, "Add these routes to MATRIX: " + ", ".join(missing)
+
+
+# --- Supabase asymmetric signing keys -------------------------------------------------------------------
+
+def test_tokens_signed_with_the_projects_asymmetric_key_are_accepted_and_forged_ones_are_not(client, db, monkeypatch):
+    import json
+    import jwt as pyjwt
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from app import auth
+    from app.config import get_settings
+
+    s = get_settings()
+    monkeypatch.setattr(s, "supabase_url", "https://proj.supabase.co")
+    good, bad = ec.generate_private_key(ec.SECP256R1()), ec.generate_private_key(ec.SECP256R1())
+    jwk = json.loads(pyjwt.algorithms.ECAlgorithm.to_jwk(good.public_key()))
+    jwk.update({"kid": "k1", "alg": "ES256", "use": "sig"})
+
+    class FakeClient:
+        def get_signing_key_from_jwt(self, token):
+            return pyjwt.PyJWK(jwk)
+
+    monkeypatch.setitem(auth._jwks_clients, "https://proj.supabase.co/auth/v1/.well-known/jwks.json", FakeClient())
+    profile, _ = make_user(db, "owner")
+    claims = {"sub": str(profile.id), "aud": "authenticated", "iss": "https://proj.supabase.co/auth/v1"}
+    ok = pyjwt.encode(claims, good, algorithm="ES256", headers={"kid": "k1"})
+    assert client.get("/api/v1/me", headers={"Authorization": f"Bearer {ok}"}).status_code == 200
+    forged = pyjwt.encode(claims, bad, algorithm="ES256", headers={"kid": "k1"})
+    assert client.get("/api/v1/me", headers={"Authorization": f"Bearer {forged}"}).status_code == 401
+    wrong_issuer = pyjwt.encode({**claims, "iss": "https://evil.example/auth/v1"}, good, algorithm="ES256", headers={"kid": "k1"})
+    assert client.get("/api/v1/me", headers={"Authorization": f"Bearer {wrong_issuer}"}).status_code == 401
+    # alg=none and unknown algorithms are refused
+    assert client.get("/api/v1/me", headers={"Authorization": "Bearer " + pyjwt.encode(claims, None, algorithm="none")}).status_code == 401
+
+
+def test_production_refuses_dev_hs256_tokens_but_starts_with_only_a_project_url(monkeypatch):
+    from app.config import Settings, assert_production_ready
+    strong = "x" * 40
+    base = dict(environment="production", widget_session_secret=strong, lead_webhook_api_key=strong, unsubscribe_signing_key=strong,
+                whatsapp_verify_token="t", whatsapp_app_secret="a", email_webhook_secret="b")
+    assert_production_ready(Settings(**base, supabase_url="https://p.supabase.co"))  # no legacy secret needed
+    import pytest
+    assert_production_ready(Settings(**base, supabase_jwt_secret=strong))  # or only the legacy secret, as before
+    with pytest.raises(RuntimeError, match="supabase_jwt_secret"):
+        assert_production_ready(Settings(**base))  # neither: nobody could sign in

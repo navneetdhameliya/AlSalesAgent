@@ -80,7 +80,8 @@ def assert_production_ready(s: Settings) -> None:
     """Refuse to start in production with development secrets or secrets shorter than 32 characters."""
     if s.environment != "production":
         return
-    bad = [k for k, dev in DEV_DEFAULTS.items() if getattr(s, k) == dev or len(getattr(s, k)) < (0 if k == "whatsapp_verify_token" else 32)]
+    optional = {"supabase_jwt_secret"} if s.supabase_url else set()  # with a project URL, tokens are checked against its public keys
+    bad = [k for k, dev in DEV_DEFAULTS.items() if k not in optional and (getattr(s, k) == dev or len(getattr(s, k)) < (0 if k == "whatsapp_verify_token" else 32))]
     if not s.whatsapp_app_secret:
         bad.append("whatsapp_app_secret")
     if not s.email_webhook_secret:

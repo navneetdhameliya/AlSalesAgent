@@ -1,6 +1,7 @@
 """Authentication.
 
-Dashboard calls carry a Supabase JWT (HS256). The user's role comes from the profiles table,
+Dashboard calls carry a Supabase JWT, signed either with the project's asymmetric key (ES256 or RS256, checked against
+the project's public keys) or with the legacy shared secret (HS256). The user's role comes from the profiles table,
 never from the token. Public endpoints use an API key or a signed widget session token.
 """
 import hmac
@@ -17,17 +18,37 @@ from app.errors import AppError
 from app.models import Profile
 
 
+_jwks_clients: dict[str, jwt.PyJWKClient] = {}
+
+
+def _jwks(url: str) -> jwt.PyJWKClient:
+    client = _jwks_clients.get(url)
+    if client is None:
+        client = _jwks_clients[url] = jwt.PyJWKClient(url, cache_keys=True, lifespan=3600, timeout=5)
+    return client
+
+
+def verify_supabase_token(token: str) -> dict:
+    """Return the token's claims or raise jwt.PyJWTError. The algorithm comes from our own allow-list, never from the token."""
+    s = get_settings()
+    alg = jwt.get_unverified_header(token).get("alg")
+    if alg == "HS256":
+        if s.environment == "production" and (not s.supabase_jwt_secret or s.supabase_jwt_secret == "dev-jwt-secret-change-me"):
+            raise jwt.InvalidAlgorithmError("HS256 is not enabled")
+        return jwt.decode(token, s.supabase_jwt_secret, algorithms=["HS256"], audience="authenticated")
+    if alg in ("ES256", "RS256") and s.supabase_url:
+        base = s.supabase_url.rstrip("/") + "/auth/v1"
+        key = _jwks(base + "/.well-known/jwks.json").get_signing_key_from_jwt(token).key
+        return jwt.decode(token, key, algorithms=[alg], audience="authenticated", issuer=base)
+    raise jwt.InvalidAlgorithmError("Unsupported token")
+
+
 def current_profile(authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> Profile:
     if not authorization or not authorization.lower().startswith("bearer "):
         raise AppError("not_authenticated", "Please sign in.", 401)
     token = authorization.split(" ", 1)[1]
     try:
-        claims = jwt.decode(
-            token,
-            get_settings().supabase_jwt_secret,
-            algorithms=["HS256"],
-            audience="authenticated",
-        )
+        claims = verify_supabase_token(token)
         user_id = uuid.UUID(claims["sub"])
     except (jwt.PyJWTError, KeyError, ValueError):
         raise AppError("not_authenticated", "Your session is not valid. Please sign in again.", 401)
